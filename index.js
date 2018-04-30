@@ -8,7 +8,6 @@ const express = require('express');
 const app = express();
 const router = express.Router();
 
-
 db.init(config.DBFILE);
 
 router.use('/history/:base/:target/:start/:weeks', currencyHistory.get);
@@ -16,6 +15,10 @@ router.use('/history/:base/:target/:start/:weeks', currencyHistory.get);
 app.use('/v1', router);
 
 app.use(onError);
+
+app.listen(config.PORT, () => {
+    console.log('API Listening on port', config.PORT);
+});
 
 process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);

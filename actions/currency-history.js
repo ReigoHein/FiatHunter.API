@@ -4,9 +4,11 @@ const _ = require('lodash/fp');
 const config = require('../config.js');
 const db = require('../db/db.js');
 const moment = require('moment');
-const request = require('request');
+const request = require('request-promise-any');
+const Q = require('q');
 
 const currencyHistory = () => {
+	const DATEFORMAT = 'YYYY-WW';
 
 	const getFn = (req, res) => {
 		let params = parseRequest(req);
@@ -18,28 +20,64 @@ const currencyHistory = () => {
 			return;
 		}
 
-		db.getHistory(params.base, params.target, params.startWeek, 
+		db.getHistory(params.base, params.target, params.startWeek,
 			params.weeks, (err, rows) => {
-			if (err != null) {
-				console.log("Could not retrieve history from db", err);
-				res.status(400).json({
-					error_message: 'Problems with the database'
-				});
-				return;
-			} else {
-				if (rows.length < weeks) {
-					// populateMissingRows(, (results) => {
-
-					// });
+				if (err) {
+					console.log("Could not retrieve history from db", err);
+					res.status(400).json({
+						error_message: 'Problems with the database'
+					});
+					return;
 				} else {
-					res.json(rows);
+					results = _.takeRight(params.weeks);
+					if (results.length < weeks) {
+						populateMissingRows(params.base, params.target, params.startWeek, params.weeks, results, (err, results) => {
+							if (err) {
+								console.log("Could not retrieve data from Fixer", err);
+								res.status(400).json({
+									error_message: 'Problems with the consumed API'
+								});
+								return;
+							} else {
+								res.json(results);
+							}
+						});
+					} else {
+						res.json(results);
+					}
 				}
-			}
-		});
+			});
 	}
 
-	const populateMissingRows = (base, target, start, weeks, cb) => {
-
+	const populateMissingRows = (base, target, start, weeks, existing, cb) => {
+		let startTime = moment(start);
+		let requests = [];
+		let apiError;
+		for (let i = 0; i < weeks; i++) {
+			let time = moment(startTime).subtract(i, weeks);
+			if (_.findIndex((item) => item.week === time.format(DATEFORMAT), existing) == -1) {
+				let formattedDay = time.day("Monday").format("YYYY-MM-DD");
+				requests.push(request($`http://data.fixer.io/api/${formattedDay}?access_key=${config.FIXER_SECRET}&base=${base}&symbols=${target}`)
+					.then((resp) => {
+						if (resp.rates[target]) {
+							let result = {
+								base: base,
+								target: target,
+								week: time.format(DATEFORMAT),
+								rate: resp.rates[target]
+							};
+							db.insertHistory(base, target, time.format(DATEFORMAT), result.rate);
+							existing.push(result);
+						}
+						
+					}).catch((err) => {
+						apiError = err;
+					}));
+			}
+		}
+		Q.all(requests).then(() => {
+			cb(apiError, existing);
+		});
 	}
 
 
@@ -78,9 +116,9 @@ const currencyHistory = () => {
 			return result;
 		}
 		if (req.params.start) {
-			let start = moment(req.params.start, 'YYYY-WW', true);
+			let start = moment(req.params.start, DATEFORMAT, true);
 			if (start.isValid()) {
-				result.startWeek = start.format('YYYY-WW');
+				result.startWeek = start.format(DATEFORMAT);
 			} else {
 				result.invalidField = 'start';
 				return;

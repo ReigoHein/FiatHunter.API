@@ -25,8 +25,11 @@ const dbModule = () => {
 		`, [base, target, startYear.year(), limit], callback);
 	}
 
-	const insertHistoryFn = (base, target, week) => {
-
+	const insertHistoryFn = (base, target, week, rate) => {
+		console.log('Inserting to database:', base, target, week, rate);
+		var statement = db.prepare('INSERT INTO history VALUES (?,?,?,?)');
+		statement.run([base, target, rate, week]);
+		statement.finalize();
 	}
 
 	const createTable = () => {
@@ -35,7 +38,7 @@ const dbModule = () => {
 			CREATE TABLE IF NOT EXISTS history (
 				base TEXT,
 				target TEXT,
-				value REAL,
+				rate REAL,
 				week TEXT
 			)
 		`);
