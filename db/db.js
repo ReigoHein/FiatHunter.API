@@ -13,21 +13,24 @@ const dbModule = () => {
 	}
 
 	const getHistoryFn = (base, target, start, weeks, callback) => {
-		let endYear = moment().year();
 		let startYear = moment(start, 'YYYY-WW', true);
-		let limit = moment().subtract(startYear).weeks();
+		let endYear = moment(startYear).subtract(weeks, "weeks");
+		let limit = moment().diff(endYear, 'weeks');
 		connection.all(`SELECT * FROM history
-			WHERE base = $1
-			AND target = $2
-			AND week LIKE '$3-%'
+			WHERE base = ?
+			AND target = ?
+			AND (
+				week LIKE ?
+				OR week LIKE ?
+			)
 			ORDER BY week DESC
-			LIMIT $4;
-		`, [base, target, startYear.year(), limit], callback);
+			LIMIT ?;
+		`, [base, target, startYear.year() + '-%', endYear.year() + '-%', limit], callback);
 	}
 
 	const insertHistoryFn = (base, target, week, rate) => {
 		console.log('Inserting to database:', base, target, week, rate);
-		var statement = db.prepare('INSERT INTO history VALUES (?,?,?,?)');
+		var statement = connection.prepare('INSERT INTO history VALUES (?,?,?,?)');
 		statement.run([base, target, rate, week]);
 		statement.finalize();
 	}
@@ -48,7 +51,7 @@ const dbModule = () => {
 		console.log('Closing database connection.');
 		connection.close();
 	}
-	
+
 	return {
 		init: initFn,
 		getHistory: getHistoryFn,

@@ -2,7 +2,7 @@
 
 const _ = require('lodash/fp');
 const config = require('../config.js');
-const db = require('../db/db.js');
+const db = require('./../db/db.js');
 const moment = require('moment');
 const request = require('request-promise-any');
 const Q = require('q');
@@ -29,8 +29,8 @@ const currencyHistory = () => {
 					});
 					return;
 				} else {
-					results = _.takeRight(params.weeks);
-					if (results.length < weeks) {
+					let results = _.takeRight(params.weeks, rows);
+					if (results.length < params.weeks) {
 						populateMissingRows(params.base, params.target, params.startWeek, params.weeks, results, (err, results) => {
 							if (err) {
 								console.log("Could not retrieve data from Fixer", err);
@@ -50,21 +50,22 @@ const currencyHistory = () => {
 	}
 
 	const populateMissingRows = (base, target, start, weeks, existing, cb) => {
-		let startTime = moment(start);
+		let startTime = moment(start, DATEFORMAT, true);
 		let requests = [];
 		let apiError;
 		for (let i = 0; i < weeks; i++) {
-			let time = moment(startTime).subtract(i, weeks);
+			let time = moment(startTime).subtract(i, 'weeks');
 			if (_.findIndex((item) => item.week === time.format(DATEFORMAT), existing) == -1) {
 				let formattedDay = time.day("Monday").format("YYYY-MM-DD");
-				requests.push(request($`http://data.fixer.io/api/${formattedDay}?access_key=${config.FIXER_SECRET}&base=${base}&symbols=${target}`)
+				requests.push(request(`http://data.fixer.io/api/${formattedDay}?access_key=${config.FIXER_SECRET}&base=${base}&symbols=${target}`)
 					.then((resp) => {
-						if (resp.rates[target]) {
+						let parsed = JSON.parse(resp);
+						if (parsed.success) {
 							let result = {
 								base: base,
 								target: target,
 								week: time.format(DATEFORMAT),
-								rate: resp.rates[target]
+								rate: parsed.rates[target]
 							};
 							db.insertHistory(base, target, time.format(DATEFORMAT), result.rate);
 							existing.push(result);
@@ -91,13 +92,13 @@ const currencyHistory = () => {
 			invalidField: ''
 		};
 		let validCurrencies = config.CURRENCIES.split(',');
-		if (req.params.base && _.findIndex(req.params.base, validCurrencies) !== -1) {
+		if (req.params.base && validCurrencies.find((item) => item === req.params.base)) {
 			result.base = req.params.base;
 		} else {
 			result.invalidField = 'base';
 			return result;
 		}
-		if (req.params.target && _.findIndex(req.params.target, validCurrencies) !== -1) {
+		if (req.params.target && validCurrencies.find((item) => item === req.params.target)) {
 			result.target = req.params.target;
 		} else {
 			result.invalidField = 'target';
