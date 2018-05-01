@@ -12,6 +12,7 @@ const currencyHistory = () => {
 
 	const getFn = (req, res) => {
 		let params = parseRequest(req);
+		const WEEKS = 25;
 
 		if (!params.valid) {
 			res.status(400).json({
@@ -21,7 +22,7 @@ const currencyHistory = () => {
 		}
 
 		db.getHistory(params.base, params.target, params.startWeek,
-			params.weeks, (err, rows) => {
+			WEEKS, (err, rows) => {
 				if (err) {
 					console.log("Could not retrieve history from db", err);
 					res.status(400).json({
@@ -29,22 +30,20 @@ const currencyHistory = () => {
 					});
 					return;
 				} else {
-					let results = _.takeRight(params.weeks, rows);
-					if (results.length < params.weeks) {
-						populateMissingRows(params.base, params.target, params.startWeek, params.weeks, results, (err, results) => {
+					let results = _.takeRight(WEEKS, rows);
+					if (results.length < WEEKS) {
+						populateMissingRows(params.base, params.target, params.startWeek, WEEKS, results, (err, results) => {
 							if (err) {
 								console.log("Could not retrieve data from Fixer", err);
 								res.status(400).json({
 									error_message: 'Problems with the consumed API'
 								});
 								return;
-							} else {
-								res.json(results);
 							}
 						});
-					} else {
-						res.json(results);
 					}
+					let ordered = _.sortBy((result) => result.week, results);
+					res.json(ordered);
 				}
 			});
 	}
@@ -55,6 +54,7 @@ const currencyHistory = () => {
 		let apiError;
 		for (let i = 0; i < weeks; i++) {
 			let time = moment(startTime).subtract(i, 'weeks');
+			console.log('Retrieving rate for date', time.format(DATEFORMAT));
 			if (_.findIndex((item) => item.week === time.format(DATEFORMAT), existing) == -1) {
 				let formattedDay = time.day("Monday").format("YYYY-MM-DD");
 				requests.push(request(`http://data.fixer.io/api/${formattedDay}?access_key=${config.FIXER_SECRET}&base=${base}&symbols=${target}`)
@@ -86,7 +86,6 @@ const currencyHistory = () => {
 		let result = {
 			base: '',
 			target: '',
-			weeks: 0,
 			startWeek: '',
 			valid: false,
 			invalidField: ''
@@ -102,18 +101,6 @@ const currencyHistory = () => {
 			result.target = req.params.target;
 		} else {
 			result.invalidField = 'target';
-			return result;
-		}
-		if (req.params.weeks && !isNaN(parseInt(req.params.weeks))) {
-			let parsedWeeks = parseInt(req.params.weeks);
-			if (parsedWeeks > 0 && parsedWeeks <= 25) {
-				result.weeks = parsedWeeks;
-			} else {
-				result.invalidField = 'weeks';
-				return result;
-			}
-		} else {
-			result.invalidField = 'weeks';
 			return result;
 		}
 		if (req.params.start) {

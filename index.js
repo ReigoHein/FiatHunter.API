@@ -10,7 +10,7 @@ const router = express.Router();
 
 db.init(config.DBFILE);
 
-router.use('/history/:base/:target/:start/:weeks', currencyHistory.get);
+router.use('/history/:base/:target/:start', currencyHistory.get);
 
 app.use('/v1', router);
 

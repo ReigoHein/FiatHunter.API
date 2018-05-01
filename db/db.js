@@ -6,6 +6,7 @@ const sqlite3 = require('sqlite3');
 
 const dbModule = () => {
 	let connection;
+	const DATEFORMAT = 'YYYY-WW';
 
 	const initFn = (fileName) => {
 		console.log('Database initialized in', fileName);
@@ -13,19 +14,14 @@ const dbModule = () => {
 	}
 
 	const getHistoryFn = (base, target, start, weeks, callback) => {
-		let startYear = moment(start, 'YYYY-WW', true);
-		let endYear = moment(startYear).subtract(weeks, "weeks");
-		let limit = moment().diff(endYear, 'weeks');
+		let startYear = moment(start, DATEFORMAT, true);
+		let endDate = moment(startYear).subtract(weeks, "weeks").format(DATEFORMAT);
 		connection.all(`SELECT * FROM history
 			WHERE base = ?
 			AND target = ?
-			AND (
-				week LIKE ?
-				OR week LIKE ?
-			)
-			ORDER BY week DESC
-			LIMIT ?;
-		`, [base, target, startYear.year() + '-%', endYear.year() + '-%', limit], callback);
+			AND week > ?
+			ORDER BY week ASC;
+		`, [base, target, endDate], callback);
 	}
 
 	const insertHistoryFn = (base, target, week, rate) => {
